@@ -1,25 +1,23 @@
-# Importación de librerías estándar
-import yfinance as yf  # Para obtener datos bursátiles
-import pandas as pd  # Para manejar tablas de datos
-import smtplib  # Para enviar correos
-import os  # Para acceder a variables de entorno
-import pdfkit  # Para convertir HTML a PDF
-from email.mime.multipart import MIMEMultipart  # Estructura del correo
-from email.mime.text import MIMEText  # Parte HTML del correo
-from email.mime.application import MIMEApplication  # Adjuntar archivos
-from datetime import datetime  # Obtener fecha actual
-from dotenv import load_dotenv  # Cargar variables desde archivo .env
+# reporte_financiero.py
 
-# Librerías para interfaz gráfica moderna
-import ttkbootstrap as ttk  # Interfaz moderna basada en Bootstrap
-from ttkbootstrap.constants import PRIMARY  # Color principal
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # Mostrar gráficos en Tkinter
-import matplotlib.pyplot as plt  # Generar gráficos
+import yfinance as yf
+import pandas as pd
+import smtplib
+import os
+import pdfkit
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+from datetime import datetime
+from dotenv import load_dotenv
 
-# Cargar variables de entorno (correo, contraseña, destinatario)
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import PRIMARY
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+
 load_dotenv()
 
-# Función para obtener datos bursátiles de AAPL, GOOGL y MSFT
 def obtener_datos():
     tickers = ["AAPL", "GOOGL", "MSFT"]
     resultados = []
@@ -45,7 +43,6 @@ def obtener_datos():
 
     return pd.DataFrame(resultados)
 
-# Función para generar el PDF del reporte
 def generar_pdf(reporte_html):
     opciones = {
         "encoding": "UTF-8",
@@ -64,19 +61,10 @@ def generar_pdf(reporte_html):
 
     pdfkit.from_file("reporte.html", "reporte.pdf", options=opciones, configuration=config)
 
-# Función para enviar el correo con adjuntos
-def enviar_email(reporte_html, tickers, panel):
+def enviar_email(remitente, password, destinatario, asunto, reporte_html, tickers, panel):
     try:
-        remitente = os.getenv("EMAIL_USER")
-        password = os.getenv("EMAIL_PASS")
-        destinatario = os.getenv("EMAIL_TO")
-
-        if not remitente or not password or not destinatario:
-            raise ValueError("Faltan datos en el archivo .env")
-
         msg = MIMEMultipart("mixed")
-        fecha = datetime.now().strftime("%d/%m/%Y")
-        msg["Subject"] = f"Reporte Bursátil Automático - {fecha}"
+        msg["Subject"] = asunto
         msg["From"] = remitente
         msg["To"] = destinatario
 
@@ -104,41 +92,34 @@ def enviar_email(reporte_html, tickers, panel):
     except Exception as e:
         ttk.Label(panel, text=f"❌ Error: {type(e).__name__} - {str(e)}", bootstyle="danger").pack(pady=10)
 
-# Clase principal de la aplicación
 class PanelFinanciero:
     def __init__(self, root):
         self.root = root
         self.root.title("📊 Panel Financiero")
         self.root.geometry("1000x600")
 
-        # Lista de empresas
         self.tickers = ["AAPL", "GOOGL", "MSFT"]
         self.df = obtener_datos()
         self.reporte_html = self.df.to_html(index=False)
         generar_pdf(self.reporte_html)
 
-        # Panel de navegación lateral
         self.menu = ttk.Frame(root, padding=10)
         self.menu.pack(side="left", fill="y")
 
-        # Panel dinámico donde cambia el contenido
         self.panel_dinamico = ttk.Frame(root, padding=20)
         self.panel_dinamico.pack(side="right", expand=True, fill="both")
 
-        # Botones del menú
         ttk.Label(self.menu, text="Menú", font=("Segoe UI", 14)).pack(pady=10)
         ttk.Button(self.menu, text="📊 Ver tabla", bootstyle=PRIMARY, command=self.mostrar_tabla).pack(pady=5, fill="x")
         for ticker in self.tickers:
             ttk.Button(self.menu, text=f"📈 Gráfico {ticker}", bootstyle=PRIMARY, command=lambda t=ticker: self.mostrar_grafico(t)).pack(pady=5, fill="x")
-        ttk.Button(self.menu, text="📤 Enviar correo", bootstyle=PRIMARY, command=self.enviar_correo).pack(pady=10, fill="x")
+        ttk.Button(self.menu, text="📤 Enviar correo", bootstyle=PRIMARY, command=self.formulario_correo).pack(pady=10, fill="x")
         ttk.Button(self.menu, text="🚪 Salir", bootstyle="danger", command=root.quit).pack(pady=20, fill="x")
 
-    # Limpia el panel dinámico antes de mostrar nuevo contenido
     def limpiar_panel(self):
         for widget in self.panel_dinamico.winfo_children():
             widget.destroy()
 
-    # Muestra la tabla de datos
     def mostrar_tabla(self):
         self.limpiar_panel()
         ttk.Label(self.panel_dinamico, text="📊 Tabla de Datos Bursátiles", font=("Segoe UI", 14)).pack(pady=10)
@@ -146,7 +127,6 @@ class PanelFinanciero:
         texto.insert("end", self.df.to_string(index=False))
         texto.pack()
 
-    # Muestra el gráfico de un ticker
     def mostrar_grafico(self, ticker):
         self.limpiar_panel()
         datos = yf.Ticker(ticker).history(period="1mo")
@@ -165,14 +145,40 @@ class PanelFinanciero:
         canvas.draw()
         canvas.get_tk_widget().pack()
 
-    # Llama a la función de envío de correo
-    def enviar_correo(self):
+    def formulario_correo(self):
         self.limpiar_panel()
-        ttk.Label(self.panel_dinamico, text="📤 Enviando correo...", font=("Segoe UI", 12)).pack(pady=10)
-        enviar_email(self.reporte_html, self.tickers, self.panel_dinamico)
+        ttk.Label(self.panel_dinamico, text="📤 Enviar Reporte por Correo", font=("Segoe UI", 14)).pack(pady=10)
 
-# Punto de entrada del programa
+        ttk.Label(self.panel_dinamico, text="Correo remitente:").pack(anchor="w")
+        entry_remitente = ttk.Entry(self.panel_dinamico, width=40)
+        entry_remitente.pack(pady=5)
+
+        destinatario = os.getenv("EMAIL_TO", "")
+        ttk.Label(self.panel_dinamico, text="Correo destinatario:").pack(anchor="w")
+        ttk.Label(self.panel_dinamico, text=destinatario, font=("Segoe UI", 10, "bold"), foreground="blue").pack(pady=5)
+
+        ttk.Label(self.panel_dinamico, text="Contraseña:").pack(anchor="w")
+        entry_password = ttk.Entry(self.panel_dinamico, width=40, show="*")
+        entry_password.pack(pady=5)
+
+        ttk.Label(self.panel_dinamico, text="Asunto del correo:").pack(anchor="w")
+        entry_asunto = ttk.Entry(self.panel_dinamico, width=60)
+        entry_asunto.pack(pady=5)
+
+        def ejecutar_envio():
+            remitente = entry_remitente.get()
+            password = entry_password.get()
+            asunto = entry_asunto.get()
+
+            if not remitente or not password or not destinatario or not asunto:
+                ttk.Label(self.panel_dinamico, text="❌ Todos los campos son obligatorios", bootstyle="danger").pack(pady=5)
+                return
+
+            enviar_email(remitente, password, destinatario, asunto, self.reporte_html, self.tickers, self.panel_dinamico)
+
+        ttk.Button(self.panel_dinamico, text="📨 Enviar ahora", bootstyle=PRIMARY, command=ejecutar_envio).pack(pady=15)
+
 if __name__ == "__main__":
-    app = ttk.Window(themename="flatly")  # Tema azul moderno
+    app = ttk.Window(themename="flatly")
     PanelFinanciero(app)
     app.mainloop()
