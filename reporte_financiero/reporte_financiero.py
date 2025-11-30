@@ -61,8 +61,12 @@ def generar_pdf(reporte_html):
 
     pdfkit.from_file("reporte.html", "reporte.pdf", options=opciones, configuration=config)
 
-def enviar_email(remitente, destinatario, asunto, cuerpo_html, tickers, panel):
+def enviar_email(asunto, cuerpo_html, tickers, panel):
     try:
+        remitente = os.getenv("EMAIL_USER")
+        password = os.getenv("EMAIL_PASS")
+        destinatario = os.getenv("EMAIL_TO")
+
         msg = MIMEMultipart("mixed")
         msg["Subject"] = asunto
         msg["From"] = remitente
@@ -71,23 +75,29 @@ def enviar_email(remitente, destinatario, asunto, cuerpo_html, tickers, panel):
         cuerpo = MIMEText(cuerpo_html, "html")
         msg.attach(cuerpo)
 
+        # Adjuntar el PDF principal
         with open("reporte.pdf", "rb") as f:
             adjunto = MIMEApplication(f.read(), _subtype="pdf")
             adjunto.add_header("Content-Disposition", "attachment", filename="reporte.pdf")
             msg.attach(adjunto)
 
+        # Adjuntar gráficos
         for ticker in tickers:
-            nombre_archivo = f"grafico_{ticker}.pdf"
-            if os.path.exists(nombre_archivo):
-                with open(nombre_archivo, "rb") as f:
-                    adjunto_grafico = MIMEApplication(f.read(), _subtype="pdf")
-                    adjunto_grafico.add_header("Content-Disposition", "attachment", filename=nombre_archivo)
-                    msg.attach(adjunto_grafico)
+            archivo = f"grafico_{ticker}.pdf"
+            if os.path.exists(archivo):
+                with open(archivo, "rb") as g:
+                    adj_g = MIMEApplication(g.read(), _subtype="pdf")
+                    adj_g.add_header("Content-Disposition", "attachment", filename=archivo)
+                    msg.attach(adj_g)
 
-        with smtplib.SMTP("localhost") as server:
+        # Envío por Gmail
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(remitente, password)
             server.sendmail(remitente, destinatario, msg.as_string())
 
         ttk.Label(panel, text="✅ Correo enviado correctamente", bootstyle="success").pack(pady=10)
+
     except Exception as e:
         ttk.Label(panel, text=f"❌ Error: {type(e).__name__} - {str(e)}", bootstyle="danger").pack(pady=10)
 
@@ -145,42 +155,36 @@ class PanelFinanciero:
         canvas.get_tk_widget().pack()
 
     def formulario_correo(self):
-        self.limpiar_panel()
-        ttk.Label(self.panel_dinamico, text="📤 Enviar Reporte por Correo", font=("Segoe UI", 16, "bold")).pack(pady=10)
+      self.limpiar_panel()
+      ttk.Label(self.panel_dinamico, text="📤 Enviar Reporte por Correo", font=("Segoe UI", 16, "bold")).pack(pady=10)
 
-        marco = ttk.Frame(self.panel_dinamico, padding=10)
-        marco.pack(pady=10, fill="both", expand=True)
+      marco = ttk.Frame(self.panel_dinamico, padding=10)
+      marco.pack(pady=10, fill="both", expand=True)
 
-        ttk.Label(marco, text="Correo Electronico:").pack(anchor="w", pady=(5, 0))
-        entry_remitente = ttk.Entry(marco, width=50)
-        entry_remitente.pack(pady=5)
+      destinatario = os.getenv("EMAIL_TO", "")
+      ttk.Label(marco, text="Correo destinatario:").pack(anchor="w", pady=(10, 0))
+      ttk.Label(marco, text=destinatario, font=("Segoe UI", 10, "bold"), foreground="blue").pack(anchor="w", pady=5)
 
-        destinatario = os.getenv("EMAIL_TO", "")
-        ttk.Label(marco, text="Correo destinatario:").pack(anchor="w", pady=(10, 0))
-        ttk.Label(marco, text=destinatario, font=("Segoe UI", 10, "bold"), foreground="blue").pack(anchor="w", pady=5)
+      ttk.Label(marco, text="Título del asunto:").pack(anchor="w", pady=(10, 0))
+      entry_asunto = ttk.Entry(marco, width=50)
+      entry_asunto.pack(pady=5)
 
-        ttk.Label(marco, text="Título del asunto:").pack(anchor="w", pady=(10, 0))
-        entry_asunto = ttk.Entry(marco, width=50)
-        entry_asunto.pack(pady=5)
+      ttk.Label(marco, text="Comentario:").pack(anchor="w", pady=(10, 0))
+      entry_comentario = ttk.Text(marco, width=50, height=6)
+      entry_comentario.pack(pady=5)
 
-        ttk.Label(marco, text="Asunto:").pack(anchor="w", pady=(10, 0))
-        entry_comentario = ttk.Text(marco, width=50, height=6)
-        entry_comentario.pack(pady=5)
+      def ejecutar_envio():
+        asunto = entry_asunto.get().strip()
+        comentario = entry_comentario.get("1.0", "end").strip()
 
-        def ejecutar_envio():
-            remitente = entry_remitente.get().strip()
-            asunto = entry_asunto.get().strip()
-            comentario = entry_comentario.get("1.0", "end").strip()
+        if not asunto or not comentario:
+            ttk.Label(self.panel_dinamico, text="❌ Todos los campos son obligatorios", bootstyle="danger").pack(pady=5)
+            return
 
-            if not remitente or not asunto or not comentario:
-                ttk.Label(self.panel_dinamico, text="❌ Todos los campos son obligatorios", bootstyle="danger").pack(pady=5)
-                return
+        cuerpo_html = f"<h3>{asunto}</h3><p>{comentario}</p><hr>{self.reporte_html}"
+        enviar_email(asunto, cuerpo_html, self.tickers, self.panel_dinamico)
 
-            cuerpo_html = f"<h3>{asunto}</h3><p>{comentario}</p><hr>{self.reporte_html}"
-            enviar_email(remitente, destinatario, asunto, cuerpo_html, self.tickers, self.panel_dinamico)
-
-        ttk.Button(self.panel_dinamico, text="📨 Enviar ahora", bootstyle="success-outline", command=ejecutar_envio).pack(pady=15)
-
+      ttk.Button(self.panel_dinamico, text="📨 Enviar ahora", bootstyle="success-outline", command=ejecutar_envio).pack(pady=15)
 if __name__ == "__main__":
     app = ttk.Window(themename="flatly")
     PanelFinanciero(app)
